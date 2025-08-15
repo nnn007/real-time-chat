@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useChat } from '../contexts/ChatContext';
+import { useP2PChat } from '../contexts/P2PChatContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,38 +15,42 @@ import {
   Copy, 
   Send, 
   Settings,
+  Download,
+  Upload,
   Trash2,
   Wifi,
   WifiOff,
   Shield,
-  Key,
-  LogOut
+  Key
 } from 'lucide-react';
 
-const ChatPage = () => {
+const P2PChatPage = () => {
   const { user, logout } = useAuth();
   const {
     messages,
     chatrooms,
     currentChatroom,
-    onlineUsers,
+    connectedPeers,
     loading,
     error,
     typingUsers,
-    connectionStatus,
     createChatroom,
     joinChatroomByCode,
     selectChatroom,
     sendMessage,
     sendTypingIndicator,
     deleteChatroom,
+    exportChatData,
+    importChatData,
+    clearAllData,
     getConnectionStatus,
     clearError
-  } = useChat();
+  } = useP2PChat();
 
   const [newMessage, setNewMessage] = useState('');
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showJoinRoom, setShowJoinRoom] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [roomDescription, setRoomDescription] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -54,6 +58,7 @@ const ChatPage = () => {
   
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -106,8 +111,12 @@ const ChatPage = () => {
       setShowJoinRoom(false);
       setJoinCode('');
       await selectChatroom(room);
+      
+      // Show success message
+      console.log(`Successfully joined room: ${room.name}`);
     } catch (error) {
       console.error('Failed to join room:', error);
+      // Error is already set in the context
     }
   };
 
@@ -142,6 +151,14 @@ const ChatPage = () => {
 
   const copyRoomCode = (code) => {
     navigator.clipboard.writeText(code);
+    // You could show a toast notification here
+  };
+
+  const handleFileImport = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      importChatData(file);
+    }
   };
 
   const handleDeleteRoom = async (roomId) => {
@@ -150,7 +167,7 @@ const ChatPage = () => {
     }
   };
 
-  const status = getConnectionStatus();
+  const connectionStatus = getConnectionStatus();
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -159,18 +176,25 @@ const ChatPage = () => {
         {/* Header */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Real-Time Chat</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">P2P Chat</h1>
             <div className="flex items-center space-x-2">
               <div className="flex items-center">
-                {connectionStatus === 'connected' ? (
+                {connectionStatus.p2pStatus.connectedPeers > 0 ? (
                   <Wifi className="w-4 h-4 text-green-500" />
                 ) : (
                   <WifiOff className="w-4 h-4 text-gray-400" />
                 )}
                 <span className="ml-1 text-sm text-gray-600 dark:text-gray-300">
-                  {onlineUsers.length}
+                  {connectionStatus.p2pStatus.connectedPeers}
                 </span>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSettings(true)}
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
             </div>
           </div>
           
@@ -207,20 +231,13 @@ const ChatPage = () => {
               variant="ghost" 
               size="sm" 
               onClick={() => {
-                if (confirm('Are you sure you want to logout?')) {
+                if (confirm('Are you sure you want to logout? This will disconnect you from all chatrooms.')) {
                   logout();
                 }
               }}
             >
-              <LogOut className="w-4 h-4" />
+              Logout
             </Button>
-          </div>
-          
-          {/* Connection Status */}
-          <div className="mt-2 text-xs text-gray-500">
-            Status: <span className={connectionStatus === 'connected' ? 'text-green-500' : 'text-red-500'}>
-              {connectionStatus}
-            </span>
           </div>
         </div>
 
@@ -231,14 +248,7 @@ const ChatPage = () => {
               Chatrooms ({chatrooms.length})
             </h2>
             
-            {loading && (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-                <p className="text-sm text-gray-500 mt-2">Loading...</p>
-              </div>
-            )}
-            
-            {chatrooms.length === 0 && !loading ? (
+            {chatrooms.length === 0 ? (
               <div className="text-center py-8">
                 <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -263,10 +273,10 @@ const ChatPage = () => {
                           {room.name}
                         </h3>
                         <div className="flex items-center space-x-1">
-                          {room.encryption_enabled && (
+                          {room.encryptionEnabled && (
                             <Shield className="w-3 h-3 text-green-500" />
                           )}
-                          {room.is_private && (
+                          {room.isPrivate && (
                             <Lock className="w-3 h-3 text-gray-400" />
                           )}
                         </div>
@@ -274,7 +284,7 @@ const ChatPage = () => {
                       
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          Code: {room.secret_code}
+                          Code: {room.secretCode}
                         </p>
                         <div className="flex items-center space-x-1">
                           <Button
@@ -282,7 +292,7 @@ const ChatPage = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              copyRoomCode(room.secret_code);
+                              copyRoomCode(room.secretCode);
                             }}
                             className="h-6 w-6 p-0"
                           >
@@ -324,13 +334,13 @@ const ChatPage = () => {
                   <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                     <span className="flex items-center">
                       <Users className="w-4 h-4 mr-1" />
-                      {onlineUsers.length} members
+                      {connectedPeers.length} members
                     </span>
                     <span className="flex items-center">
                       <Key className="w-4 h-4 mr-1" />
-                      {currentChatroom.secret_code}
+                      {currentChatroom.secretCode}
                     </span>
-                    {currentChatroom.encryption_enabled && (
+                    {currentChatroom.encryptionEnabled && (
                       <Badge variant="secondary" className="text-xs">
                         <Shield className="w-3 h-3 mr-1" />
                         Encrypted
@@ -338,18 +348,19 @@ const ChatPage = () => {
                     )}
                   </div>
                   
-                  {/* Show online users */}
-                  {onlineUsers.length > 0 && (
+                  {/* Show connected users */}
+                  {connectedPeers.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Online:</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Members:</p>
                       <div className="flex flex-wrap gap-1">
-                        {onlineUsers.map((user) => (
+                        {connectedPeers.map((peer) => (
                           <Badge 
-                            key={user.id} 
+                            key={peer.id} 
                             variant="outline" 
                             className="text-xs"
                           >
-                            {user.username}
+                            {peer.username}
+                            {peer.userId === user?.id && ' (You)'}
                           </Badge>
                         ))}
                       </div>
@@ -360,7 +371,7 @@ const ChatPage = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => copyRoomCode(currentChatroom.secret_code)}
+                  onClick={() => copyRoomCode(currentChatroom.secretCode)}
                 >
                   <Copy className="w-4 h-4 mr-2" />
                   Copy Code
@@ -386,24 +397,24 @@ const ChatPage = () => {
                     <div
                       key={message.id || index}
                       className={`flex ${
-                        message.user_id === user?.id ? 'justify-end' : 'justify-start'
+                        message.userId === user?.id ? 'justify-end' : 'justify-start'
                       }`}
                     >
                       <div
                         className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                          message.user_id === user?.id
+                          message.userId === user?.id
                             ? 'bg-blue-500 text-white'
                             : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border'
                         }`}
                       >
-                        {message.user_id !== user?.id && (
+                        {message.userId !== user?.id && (
                           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                            {message.username || message.display_name}
+                            {message.username}
                           </p>
                         )}
                         <p className="text-sm">{message.content}</p>
                         <p className={`text-xs mt-1 ${
-                          message.user_id === user?.id
+                          message.userId === user?.id
                             ? 'text-blue-100'
                             : 'text-gray-500 dark:text-gray-400'
                         }`}>
@@ -419,7 +430,7 @@ const ChatPage = () => {
                   <div className="flex justify-start">
                     <div className="bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded-lg">
                       <p className="text-sm text-gray-600 dark:text-gray-300">
-                        {typingUsers.map(u => u.username).join(', ')} 
+                        {typingUsers.map(user => user.username).join(', ')} 
                         {typingUsers.length === 1 ? ' is' : ' are'} typing...
                       </p>
                     </div>
@@ -439,11 +450,11 @@ const ChatPage = () => {
                   onKeyPress={handleKeyPress}
                   placeholder="Type a message..."
                   className="flex-1"
-                  disabled={loading || connectionStatus !== 'connected'}
+                  disabled={loading}
                 />
                 <Button
                   onClick={handleSendMessage}
-                  disabled={!newMessage.trim() || loading || connectionStatus !== 'connected'}
+                  disabled={!newMessage.trim() || loading}
                   size="sm"
                 >
                   <Send className="w-4 h-4" />
@@ -456,7 +467,7 @@ const ChatPage = () => {
             <div className="text-center">
               <MessageCircle className="w-24 h-24 text-gray-300 mx-auto mb-6" />
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
-                Welcome to Real-Time Chat
+                Welcome to P2P Chat
               </h2>
               <p className="text-gray-500 dark:text-gray-400 mb-6">
                 Select a chatroom or create a new one to start chatting
@@ -542,9 +553,12 @@ const ChatPage = () => {
                 <Input
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  placeholder="Enter room code"
+                  placeholder="Enter 8-character room code"
                   maxLength={8}
                 />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Enter any 8-character code to create/join a room
+                </p>
               </div>
               
               <div className="flex space-x-2">
@@ -568,6 +582,89 @@ const ChatPage = () => {
         </div>
       )}
 
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <h3 className="font-medium text-gray-900 dark:text-white">Data Management</h3>
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={exportChatData}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <h3 className="font-medium text-gray-900 dark:text-white">Connection Status</h3>
+                <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                  <div>Status: {connectionStatus.status}</div>
+                  <div>Connected Peers: {connectionStatus.p2pStatus.connectedPeers}</div>
+                  <div>Encryption: {connectionStatus.encryptionSupported ? 'Supported' : 'Not Supported'}</div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Button
+                  onClick={() => {
+                    if (confirm('This will delete all local data. Are you sure?')) {
+                      clearAllData();
+                    }
+                  }}
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Clear All Data
+                </Button>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => setShowSettings(false)}
+                  variant="outline"
+                >
+                  Close
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        onChange={handleFileImport}
+        className="hidden"
+      />
+
       {/* Error Display */}
       {error && (
         <div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
@@ -588,4 +685,4 @@ const ChatPage = () => {
   );
 };
 
-export default ChatPage;
+export default P2PChatPage;

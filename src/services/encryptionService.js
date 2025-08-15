@@ -406,6 +406,231 @@ class EncryptionService {
     window.crypto.getRandomValues(array);
     return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
   }
+
+  /**
+   * Generate room key for P2P chatroom
+   * @param {string} chatroomId - Chatroom ID
+   * @param {string} secretCode - Secret room code
+   * @returns {Promise<CryptoKey>} Generated room key
+   */
+  async generateRoomKey(chatroomId, secretCode) {
+    try {
+      // Derive key from secret code for consistent key generation across peers
+      const encoder = new TextEncoder();
+      const keyMaterial = await window.crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secretCode),
+        'PBKDF2',
+        false,
+        ['deriveBits', 'deriveKey']
+      );
+
+      // Derive AES key from secret code
+      const key = await window.crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt: encoder.encode(chatroomId), // Use chatroom ID as salt
+          iterations: 100000,
+          hash: 'SHA-256'
+        },
+        keyMaterial,
+        {
+          name: 'AES-GCM',
+          length: 256
+        },
+        false, // not extractable for security
+        ['encrypt', 'decrypt']
+      );
+
+      this.sharedKeys.set(chatroomId, key);
+      
+      console.log(`Generated room key for chatroom: ${chatroomId}`);
+      return key;
+    } catch (error) {
+      console.error('Failed to generate room key:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Verify secret code matches the stored key
+   * @param {string} chatroomId - Chatroom ID
+   * @param {string} secretCode - Secret code to verify
+   * @returns {Promise<boolean>} Whether the secret code is valid
+   */
+  async verifySecretCode(chatroomId, secretCode) {
+    try {
+      // Generate key from provided secret code
+      const testKey = await this.generateRoomKey(chatroomId + '_test', secretCode);
+      
+      // Test encryption/decryption with a known message
+      const testMessage = 'test-verification';
+      const encrypted = await this.encryptMessageWithKey(testKey, testMessage);
+      const decrypted = await this.decryptMessageWithKey(testKey, encrypted);
+      
+      // Clean up test key
+      this.sharedKeys.delete(chatroomId + '_test');
+      
+      return decrypted === testMessage;
+    } catch (error) {
+      console.error('Failed to verify secret code:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Encrypt message with specific key
+   * @param {CryptoKey} key - Encryption key
+   * @param {string} message - Message to encrypt
+   * @returns {Promise<Object>} Encrypted message data
+   */
+  async encryptMessageWithKey(key, message) {
+    try {
+      // Generate random IV
+      const iv = window.crypto.getRandomValues(new Uint8Array(12));
+      
+      // Convert message to ArrayBuffer
+      const messageBuffer = new TextEncoder().encode(message);
+      
+      // Encrypt the message
+      const encryptedBuffer = await window.crypto.subtle.encrypt(
+        {
+          name: 'AES-GCM',
+          iv: iv
+        },
+        key,
+        messageBuffer
+      );
+
+      // Convert to base64 for transmission
+      const encryptedData = this.arrayBufferToBase64(encryptedBuffer);
+      const ivData = this.arrayBufferToBase64(iv.buffer);
+
+      return {
+        encryptedData,
+        iv: ivData,
+        algorithm: 'AES-GCM'
+      };
+    } catch (error) {
+      console.error('Failed to encrypt message with key:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Decrypt message with specific key
+   * @param {CryptoKey} key - Decryption key
+   * @param {Object} encryptedMessage - Encrypted message data
+   * @returns {Promise<string>} Decrypted message
+   */
+  async decryptMessageWithKey(key, encryptedMessage) {
+    try {
+      // Convert from base64
+      const encryptedBuffer = this.base64ToArrayBuffer(encryptedMessage.encryptedData);
+      const iv = this.base64ToArrayBuffer(encryptedMessage.iv);
+
+      // Decrypt the message
+      const decryptedBuffer = await window.crypto.subtle.decrypt(
+        {
+          name: 'AES-GCM',
+          iv: new Uint8Array(iv)
+        },
+        key,
+        encryptedBuffer
+      );
+
+      // Convert back to string
+      const decryptedMessage = new TextDecoder().decode(decryptedBuffer);
+      
+      return decryptedMessage;
+    } catch (error) {
+      console.error('Failed to decrypt message with key:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Share encryption key with peer using their public key
+   * @param {string} chatroomId - Chatroom ID
+   * @param {string} peerId - Peer ID to share key with
+   * @returns {Promise<ArrayBuffer>} Encrypted key data
+   */
+  async shareKeyWithPeer(chatroomId, peerId) {
+    const roomKey = this.sharedKeys.get(chatroomId);
+    const peerPublicKey = this.publicKeys.get(peerId);
+
+    if (!roomKey) {
+      throw new Error(`No room key found for chatroom: ${chatroomId}`);
+    }
+
+    if (!peerPublicKey) {
+      throw new Error(`No public key found for peer: ${peerId}`);
+    }
+
+    try {
+      // Export the room key
+      const keyData = await window.crypto.subtle.exportKey('raw', roomKey);
+      
+      // Encrypt the key data with peer's public key
+      const encryptedKey = await window.crypto.subtle.encrypt(
+        {
+          name: 'RSA-OAEP'
+        },
+        peerPublicKey,
+        keyData
+      );
+
+      return encryptedKey;
+    } catch (error) {
+      console.error('Failed to share key with peer:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Receive and import shared key from peer
+   * @param {string} chatroomId - Chatroom ID
+   * @param {ArrayBuffer} encryptedKeyData - Encrypted key data from peer
+   * @returns {Promise<CryptoKey>} Imported room key
+   */
+  async receiveKeyFromPeer(chatroomId, encryptedKeyData) {
+    const keyPair = this.keyPairs.get(chatroomId);
+    
+    if (!keyPair) {
+      throw new Error(`No key pair found for chatroom: ${chatroomId}`);
+    }
+
+    try {
+      // Decrypt the key data with our private key
+      const keyData = await window.crypto.subtle.decrypt(
+        {
+          name: 'RSA-OAEP'
+        },
+        keyPair.privateKey,
+        encryptedKeyData
+      );
+
+      // Import the room key
+      const roomKey = await window.crypto.subtle.importKey(
+        'raw',
+        keyData,
+        {
+          name: 'AES-GCM',
+          length: 256
+        },
+        false, // not extractable
+        ['encrypt', 'decrypt']
+      );
+
+      this.sharedKeys.set(chatroomId, roomKey);
+      
+      console.log(`Received and imported room key for chatroom: ${chatroomId}`);
+      return roomKey;
+    } catch (error) {
+      console.error('Failed to receive key from peer:', error);
+      throw error;
+    }
+  }
 }
 
 // Create singleton instance

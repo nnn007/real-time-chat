@@ -1,208 +1,196 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Eye, EyeOff, MessageCircle, Shield, Lock } from 'lucide-react'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { MessageCircle, Shield, Users, Zap } from 'lucide-react'
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
     username: '',
-    password: '',
-    remember_me: false,
+    password: ''
   })
-  const [showPassword, setShowPassword] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const { login, error, clearError } = useAuth()
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
-    
-    // Clear error when user starts typing
-    if (error) {
-      clearError()
-    }
-  }
+  const [isLoading, setIsLoading] = useState(false)
+  
+  const { login, error } = useAuth()
+  const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setIsSubmitting(true)
+    setIsLoading(true)
 
     try {
-      await login(formData)
-    } catch (err) {
-      // Error is handled by context
+      await login(formData.username, formData.password)
+      navigate('/chat')
+    } catch (error) {
+      console.error('Login failed:', error)
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
     }
   }
 
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    })
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-      <div className="w-full max-w-md space-y-8">
-        {/* Header */}
-        <div className="text-center">
-          <div className="flex items-center justify-center mb-4">
-            <div className="bg-primary rounded-full p-3">
-              <MessageCircle className="h-8 w-8 text-primary-foreground" />
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+          {/* Left side - Features */}
+          <div className="space-y-8">
+            <div className="text-center lg:text-left">
+              <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+                P2P Chat
+              </h1>
+              <p className="text-xl text-gray-600 dark:text-gray-300">
+                Secure, decentralized messaging with end-to-end encryption
+              </p>
             </div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Welcome Back
-          </h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">
-            Sign in to your secure chat account
-          </p>
-        </div>
 
-        {/* Login Form */}
-        <Card className="shadow-lg">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Sign In</CardTitle>
-            <CardDescription className="text-center">
-              Enter your credentials to access your account
-            </CardDescription>
-          </CardHeader>
-          
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              {/* Error Alert */}
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              {/* Username/Email Field */}
-              <div className="space-y-2">
-                <Label htmlFor="username">Username or Email</Label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  placeholder="Enter your username or email"
-                  value={formData.username}
-                  onChange={handleInputChange}
-                  required
-                  disabled={isSubmitting}
-                  className="w-full"
-                />
+            <div className="space-y-6">
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0">
+                  <Shield className="w-8 h-8 text-green-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    End-to-End Encryption
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-300">
+                    Your messages are encrypted locally and only you and your contacts can read them
+                  </p>
+                </div>
               </div>
 
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    required
-                    disabled={isSubmitting}
-                    className="w-full pr-10"
-                  />
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0">
+                  <Users className="w-8 h-8 text-blue-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Peer-to-Peer
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-300">
+                    Connect directly with others without central servers storing your data
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0">
+                  <MessageCircle className="w-8 h-8 text-purple-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Secret Room Codes
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-300">
+                    Create private chatrooms and share access with unique 8-character codes
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-4">
+                <div className="flex-shrink-0">
+                  <Zap className="w-8 h-8 text-yellow-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Local Storage
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-300">
+                    Your chat history is stored locally in your browser - no cloud, no tracking
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right side - Login Form */}
+          <div className="max-w-md mx-auto w-full">
+            <Card>
+              <CardHeader className="text-center">
+                <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+                <CardDescription>
+                  Enter your username to continue to P2P Chat
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                      id="username"
+                      name="username"
+                      type="text"
+                      required
+                      value={formData.username}
+                      onChange={handleChange}
+                      placeholder="Enter your username"
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      value={formData.password}
+                      onChange={handleChange}
+                      placeholder="Enter your password"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      For demo purposes, any password works
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded text-sm">
+                      {error}
+                    </div>
+                  )}
+
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isSubmitting}
+                    type="submit"
+                    className="w-full"
+                    disabled={isLoading}
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
+                    {isLoading ? 'Signing in...' : 'Sign In'}
                   </Button>
+
+                  <div className="text-center">
+                    <Link
+                      to="/register"
+                      className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      Don't have an account? Create one
+                    </Link>
+                  </div>
+                </form>
+
+                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <div className="text-center">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      🔒 Your data stays on your device<br />
+                      🌐 No servers, no tracking, no ads
+                    </p>
+                  </div>
                 </div>
-              </div>
-
-              {/* Remember Me */}
-              <div className="flex items-center space-x-2">
-                <input
-                  id="remember_me"
-                  name="remember_me"
-                  type="checkbox"
-                  checked={formData.remember_me}
-                  onChange={handleInputChange}
-                  disabled={isSubmitting}
-                  className="rounded border-gray-300 text-primary focus:ring-primary"
-                />
-                <Label htmlFor="remember_me" className="text-sm">
-                  Remember me for 30 days
-                </Label>
-              </div>
-            </CardContent>
-
-            <CardFooter className="flex flex-col space-y-4">
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Signing In...
-                  </>
-                ) : (
-                  'Sign In'
-                )}
-              </Button>
-
-              {/* Links */}
-              <div className="text-center space-y-2">
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-primary hover:underline"
-                >
-                  Forgot your password?
-                </Link>
-                <div className="text-sm text-gray-600 dark:text-gray-300">
-                  Don't have an account?{' '}
-                  <Link
-                    to="/register"
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Sign up
-                  </Link>
-                </div>
-              </div>
-            </CardFooter>
-          </form>
-        </Card>
-
-        {/* Security Features */}
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center space-x-6 text-sm text-gray-600 dark:text-gray-300">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-4 w-4" />
-              <span>End-to-End Encrypted</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Lock className="h-4 w-4" />
-              <span>Secure & Private</span>
-            </div>
+              </CardContent>
+            </Card>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Your messages are encrypted and only you and your recipients can read them.
-          </p>
         </div>
       </div>
     </div>
   )
 }
-
