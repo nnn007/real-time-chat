@@ -56,7 +56,7 @@ A modern, decentralized peer-to-peer chat application with end-to-end encryption
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/nnn007/real-time-chat.git
 cd Real-Time-Chat-App
 ```
 
